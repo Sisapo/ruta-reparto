@@ -211,7 +211,7 @@ ol.stops{list-style:none;margin:0;padding:0}
 {
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const APP_VERSION='0.6.0-beta';
+const APP_VERSION='0.6.1-beta';
 const KEY='rutaReparto.v1';
 const OFF0={id:'vdo',name:'Correos Villarrubia de los Ojos',addr:'Calle Tirante 43, 13670 Villarrubia de los Ojos, Ciudad Real',ll:''};
 const OFF1={id:'mal',name:'Correos Malagón',addr:'Calle Real 82, 13420 Malagón, Ciudad Real',ll:''};
@@ -436,7 +436,7 @@ function render(){
   const row=(s,idx)=>{const num=s.done?'✓':++i;if(s.done&&S.hideDone)return'';const nb=s.codes.length,eta=sc.ok&&!s.done&&sc.eta[s.id]!=null?`<b>≈ ${hhmm(sc.eta[s.id])}</b> · `:'';
     return `<li class="stop${s.done?' done':''}"><div class="n">${num}</div><div>
       <div class="ad">${s.addr?esc(s.addr):'<span style="color:var(--red)">Falta dirección</span>'}</div>
-      <div class="meta">${eta}${nb>1?`<b>${nb} bultos</b> · `:''}${nb?esc(s.codes.join(', '))+' · ':''}${s.note?esc(s.note)+' · ':''}${s.ll?'<span class="tag ok">localizada</span>':'<span class="tag no">sin coordenadas</span>'}</div></div>
+      <div class="meta">${eta}${nb>1?`<b>${nb} bultos</b> · `:''}${nb?esc(s.codes.join(', '))+' · ':''}${s.note?esc(s.note)+' · ':''}${s.ll?(s.approx?`<span class="tag no">aproximada (${s.approx})</span>`:'<span class="tag ok">localizada</span>'):'<span class="tag no">sin coordenadas</span>'}</div></div>
       <div class="acts">
         <button class="sm" data-a="done" data-i="${idx}">${s.done?'Pendiente':'Entregada'}</button>
         <button class="sm" data-a="up" data-i="${idx}" aria-label="Subir">↑</button>
@@ -519,7 +519,7 @@ $('edSave').onclick=()=>{
     if(same){codes.forEach(c=>same.codes.includes(c)||same.codes.push(c));if(!same.ll&&ll)same.ll=ll;
       save();render();clearSegs();toast(`Misma dirección: añadido a la parada existente (${same.codes.length} bultos)`);return closeEdit()}
     S.stops.push({id:editing.id,codes,addr,ll,note:$('edNote').value.trim(),done:false});toast('Parada añadida ('+S.stops.length+')');
-  }else Object.assign(editing,{codes,addr,ll,note:$('edNote').value.trim()});
+  }else{if(addr!==editing.addr||(ll&&JSON.stringify(ll)!==JSON.stringify(editing.ll)))editing.approx='';if(addr!==editing.addr&&!$('edLL').value.trim())editing.ll=null;Object.assign(editing,{codes,addr,ll:ll||editing.ll,note:$('edNote').value.trim()})}
   save();render();clearSegs();closeEdit();
 };
 $('addMan').onclick=()=>openEdit();
@@ -571,15 +571,30 @@ $('perms').onclick=async()=>{const out=[];
   try{if(navigator.storage&&navigator.storage.persist)out.push(await navigator.storage.persist()?'datos: guardado permanente':'datos: guardado normal')}catch(e){}
   cfgMsg('Permisos — '+out.join(' · '),out.some(x=>/denegad/.test(x)))};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+/* Búsqueda escalonada: dirección exacta → calle sin número → calle en el pueblo → pueblo. Nunca cambia de pueblo. */
+async function locate(addr){
+  const parts=String(addr).split(',').map(t=>t.trim()).filter(Boolean);
+  const street=(parts[0]||'').replace(/\b(local|piso|[aá]tico|bajo|portal|puerta|esc\.?)\b.*$/i,'').replace(/\bn[ºo°]\s*/i,'').trim();
+  const place=parts.slice(1).find(t=>/\b\d{5}\b/.test(t))||'';
+  const town=(place||String(S.cfg.town).split(',')[0]).replace(/\b\d{5}\b/,'').trim();
+  const where=place||String(S.cfg.town).split(',')[0];
+  const noNum=street.replace(/\s*(n[ºo°]\s*)?\d+\s*[A-Za-z]?$/,'').trim();
+  const tries=[[`${street}, ${where}`,''],[`${noNum}, ${where}`,'calle'],[`${street}, ${town}`,''],[`${noNum}, ${town}`,'calle'],[`${town}, ${String(S.cfg.town).split(',').slice(1).join(',')||'España'}`,'pueblo']];
+  const seen=new Set();
+  for(const [q,level] of tries){if(!q.replace(/[ ,]/g,'')||seen.has(q))continue;seen.add(q);
+    const r=await geocode(q,true);await sleep(S.cfg.gkey?150:1100);
+    if(r&&(!town||!r.name||norm(r.name).includes(norm(town).split(' ').sort((x,y)=>y.length-x.length)[0])))return {...r,level}}
+  return null;
+}
 $('geoAll').onclick=async()=>{
   const todo=S.stops.filter(s=>!s.ll&&s.addr&&!s.done);const offs=[...new Set([curOff(),endOff()])].filter(x=>!x.ll&&x.addr);const needOffice=offs.length>0;const aps=S.appts.filter(a=>a.on&&!a.ll&&(a.addr||a.name));
   if(!todo.length&&!needOffice&&!aps.length){$('geoMsg').textContent='Todo lo pendiente ya está localizado.';return}
-  $('geoAll').disabled=true;let ok=0,fail=0;$('geoMsg').className='msg';
+  $('geoAll').disabled=true;let ok=0,fail=0,apx=0;$('geoMsg').className='msg';
   try{
     for(const ofc of offs){$('geoMsg').textContent='Localizando '+(ofc.name||'la oficina')+'…';const r=await geocode(ofc.addr,true);if(r){ofc.ll=`${r.lat.toFixed(6)}, ${r.lon.toFixed(6)}`;syncOff();save()}else fail++;await sleep(S.cfg.gkey?150:1100)}
     for(const a of aps){$('geoMsg').textContent='Localizando '+a.name+'…';const r=await geocode(a.addr||a.name,true);if(r){a.ll=`${r.lat.toFixed(6)}, ${r.lon.toFixed(6)}`;save();render()}else fail++;await sleep(S.cfg.gkey?150:1100)}
-    for(const s of todo){$('geoMsg').textContent=`Localizando ${ok+fail+1} de ${todo.length}…`;const r=await geocode(s.addr.split(',')[0].replace(/\b(local|piso|atico|ático|bajo)\b.*$/i,'').trim()||s.addr);r?(s.ll={lat:r.lat,lon:r.lon},ok++):fail++;save();render();await sleep(S.cfg.gkey?150:1100)}
-    $('geoMsg').className='msg'+(fail?' err':'');$('geoMsg').textContent=`${ok} localizadas${fail?`, ${fail} sin encontrar: edítalas o fija el punto con GPS en la puerta`:''}.`;
+    for(const s of todo){$('geoMsg').textContent=`Localizando ${ok+fail+1} de ${todo.length}…`;const r=await locate(s.addr);if(r){s.ll={lat:r.lat,lon:r.lon};s.approx=r.level||'';ok++;if(r.level)apx++}else fail++;save();render()}
+    $('geoMsg').className='msg'+(fail||apx?' err':'');$('geoMsg').textContent=`${ok} localizadas${apx?` (${apx} de forma aproximada: revisa su posición o fíjala con el GPS en la puerta)`:''}${fail?`, ${fail} sin encontrar: edítalas o fija el punto con GPS en la puerta`:''}.`;
   }catch(e){$('geoMsg').className='msg err';$('geoMsg').textContent=NETERR}
   $('geoAll').disabled=false;
 };
