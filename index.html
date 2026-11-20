@@ -22,6 +22,7 @@
 :root{color-scheme:light dark;--bg:light-dark(#fff,#0e0e0e);--ink:light-dark(#111,#f2f2f2);--mut:light-dark(#666,#9a9a9a);--line:light-dark(#e3e3e3,#2a2a2a);--red:#e4002b;--ok:light-dark(#0a7a3d,#4cc27f)}
 :root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
 *{box-sizing:border-box;min-width:0}
+[hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Archivo,system-ui,sans-serif;overflow-x:clip;padding-bottom:96px}
 header{border-top:8px solid var(--red);padding:20px max(5vw,16px) 8px;max-width:820px;margin:auto}
 h1{font:800 clamp(30px,7vw,46px)/1.05 Archivo;font-stretch:112%;margin:0;text-wrap:balance}
@@ -78,6 +79,8 @@ ol.stops{list-style:none;margin:0;padding:0}
 .stop.appt{background:light-dark(#f4f4f4,#1a1a1a);border-left:6px solid var(--ink);padding-left:8px}
 .stop.late{border-left-color:var(--red)}.stop.late .meta b{color:var(--red)}
 .ap{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.offbar{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:10px;align-items:end;margin-top:14px;padding:12px;border:2px solid var(--ink);border-radius:10px}
+@media(max-width:600px){.offbar{grid-template-columns:minmax(0,1fr)}}
 @media(prefers-reduced-motion:reduce){.toast{transition:none}}
 @media(max-width:600px){.stop{grid-template-columns:40px minmax(0,1fr)}.stop .n{font-size:26px}.acts{grid-column:1/-1;gap:4px}.acts .sm{padding:0 8px;font-size:13px;flex:1}}
 </style>
@@ -89,13 +92,18 @@ ol.stops{list-style:none;margin:0;padding:0}
   <p class="sub">Escanea la etiqueta, la app lee código y dirección, ordena la ruta y la abre en Google Maps. Sale y vuelve a la oficina.</p>
 </header>
 <main>
-  <p class="sub" style="margin:12px 0 0"><b>Inicio y fin:</b> <span id="officeTxt"></span></p>
+  <div class="offbar">
+    <div><label for="offStart">Salida desde</label><select id="offStart"></select></div>
+    <div><label for="offEnd">Vuelta a</label><select id="offEnd"></select></div>
+    <button class="sm" id="offManage">Gestionar oficinas</button>
+  </div>
+  <p class="note" id="officeTxt"></p>
   <div class="stats" id="stats"></div>
 
   <details class="cfg" id="cfgBox">
     <summary>Oficina y ajustes de ruta</summary>
     <div class="grid">
-      <div><label for="offSel">Oficina de Correos (inicio y fin de la ruta)</label><select id="offSel"></select></div>
+      <div><label for="offSel">Oficina que estás editando (también será la de salida)</label><select id="offSel"></select></div>
       <div><label for="offName">Nombre de la oficina</label><input id="offName" placeholder="Oficina de Correos de…"></div>
       <div><label for="office">Dirección de la oficina</label><input id="office" placeholder="Calle, número, CP localidad"></div>
       <div><label for="officeLL">Coordenadas de la oficina (opcional)</label><input id="officeLL" placeholder="lat, lon" inputmode="decimal"></div>
@@ -203,17 +211,20 @@ ol.stops{list-style:none;margin:0;padding:0}
 {
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const APP_VERSION='0.5.0-beta';
+const APP_VERSION='0.6.0-beta';
 const KEY='rutaReparto.v1';
 const OFF0={id:'vdo',name:'Correos Villarrubia de los Ojos',addr:'Calle Tirante 43, 13670 Villarrubia de los Ojos, Ciudad Real',ll:''};
-const DEF={offices:[OFF0],officeId:'vdo',office:OFF0.addr,officeLL:'',town:'13670 Villarrubia de los Ojos, Ciudad Real',mode:'driving',per:'9',ocrOn:'1',gkey:'',t0:'08:30',speed:'40',svc:'2',tEnd:''};
+const OFF1={id:'mal',name:'Correos Malagón',addr:'Calle Real 82, 13420 Malagón, Ciudad Real',ll:''};
+const DEF={offices:[OFF0,OFF1],officeId:'vdo',endOfficeId:'',office:OFF0.addr,officeLL:'',town:'13670 Villarrubia de los Ojos, Ciudad Real',mode:'driving',per:'9',ocrOn:'1',gkey:'',t0:'08:30',speed:'40',svc:'2',tEnd:''};
 const APPTS0=[{id:'plp',name:'Puerto Lápice',addr:'Puerto Lápice, Ciudad Real',ll:'',start:'10:00',end:'10:30',on:false},{id:'lab',name:'Las Labores',addr:'Las Labores, Ciudad Real',ll:'',start:'12:30',end:'12:45',on:false}];
 let S={cfg:{...DEF},stops:[],hideDone:false};
 try{const r=localStorage.getItem(KEY);if(r){const o=JSON.parse(r);S={...S,...o,cfg:{...DEF,...(o.cfg||{})}}}}catch(e){}
 S.stops.forEach(s=>{if(!s.codes){s.codes=s.code?[s.code]:[];delete s.code}delete s.names});
 if(!Array.isArray(S.appts))S.appts=APPTS0.map(a=>({...a}));
 if(!Array.isArray(S.cfg.offices)||!S.cfg.offices.length)S.cfg.offices=[{...OFF0}];
+if(!S.cfg.offices.some(o=>o.id===OFF1.id)&&!S.cfg.offices.some(o=>/malag/i.test(o.addr)))S.cfg.offices.push({...OFF1});
 if(!S.cfg.offices.some(o=>o.id===S.cfg.officeId))S.cfg.officeId=S.cfg.offices[0].id;
+if(S.cfg.endOfficeId&&!S.cfg.offices.some(o=>o.id===S.cfg.endOfficeId))S.cfg.endOfficeId='';
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
 const toast=t=>{const el=$('toast');el.textContent=t;el.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('on'),2600)};
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
@@ -231,14 +242,21 @@ function syncOff(){const o=curOff();S.cfg.officeId=o.id;S.cfg.office=o.addr;S.cf
   const cpm=String(o.addr||'').match(/\b\d{5}\s.+$/);if(cpm&&cpm[0]!==S.cfg.town){S.cfg.town=cpm[0];$('town').value=S.cfg.town}
   $('offSel').innerHTML=S.cfg.offices.map(x=>`<option value="${esc(x.id)}"${x.id===o.id?' selected':''}>${esc(x.name||x.addr||'Oficina sin nombre')}</option>`).join('');
   $('offName').value=o.name||'';$('office').value=o.addr||'';$('officeLL').value=o.ll||'';$('offDel').disabled=S.cfg.offices.length<2;
-  $('officeTxt').textContent=(o.name||'Oficina')+' · '+(o.addr||'sin dirección')}
+  const opts=sel=>S.cfg.offices.map(x=>`<option value="${esc(x.id)}"${x.id===sel?' selected':''}>${esc(x.name||x.addr||'Oficina sin nombre')}</option>`).join('');
+  $('offStart').innerHTML=opts(o.id);$('offEnd').innerHTML=`<option value="">La misma de salida</option>`+opts(S.cfg.endOfficeId);
+  const e=endOff();$('officeTxt').textContent=`Salida: ${o.addr||'sin dirección'}`+(e!==o?` · Vuelta: ${e.addr||'sin dirección'}`:' · Vuelta a la misma oficina')}
+const endOff=()=>S.cfg.offices.find(x=>x.id===S.cfg.endOfficeId)||curOff();
+const endLL=()=>parseLL(endOff().ll);
+$('offStart').onchange=()=>{S.cfg.officeId=$('offStart').value;if(S.cfg.endOfficeId===S.cfg.officeId)S.cfg.endOfficeId='';syncOff();save();render();clearSegs();toast('Salida desde '+curOff().name)};
+$('offEnd').onchange=()=>{S.cfg.endOfficeId=$('offEnd').value===S.cfg.officeId?'':$('offEnd').value;syncOff();save();render();clearSegs();toast('Vuelta a '+endOff().name)};
+$('offManage').onclick=()=>{$('cfgBox').open=true;$('cfgBox').scrollIntoView({behavior:'smooth'})};
 $('offSel').onchange=()=>{S.cfg.officeId=$('offSel').value;syncOff();save();render();clearSegs();toast('Inicio y fin: '+curOff().name)};
 $('offName').onchange=()=>{curOff().name=$('offName').value.trim();syncOff();save()};
 $('office').onchange=()=>{const o=curOff();o.addr=$('office').value.trim();o.ll='';syncOff();save();clearSegs()};
 $('officeLL').onchange=()=>{const ll=parseLL($('officeLL').value);curOff().ll=ll?`${ll.lat.toFixed(6)}, ${ll.lon.toFixed(6)}`:'';syncOff();save();clearSegs()};
 $('offAdd').onclick=()=>{const o={id:uid(),name:'Nueva oficina',addr:'',ll:''};S.cfg.offices.push(o);S.cfg.officeId=o.id;syncOff();save();clearSegs();$('offName').focus();$('offName').select()};
 let offDelArm=0;$('offDel').onclick=()=>{if(S.cfg.offices.length<2)return;if(Date.now()-offDelArm>3000){offDelArm=Date.now();$('offDel').textContent='Pulsa otra vez para borrar';setTimeout(()=>$('offDel').textContent='Borrar esta oficina',3000);return}
-  S.cfg.offices=S.cfg.offices.filter(o=>o.id!==S.cfg.officeId);S.cfg.officeId=S.cfg.offices[0].id;$('offDel').textContent='Borrar esta oficina';syncOff();save();clearSegs()};
+  S.cfg.offices=S.cfg.offices.filter(o=>o.id!==S.cfg.officeId);S.cfg.officeId=S.cfg.offices[0].id;if(!S.cfg.offices.some(o=>o.id===S.cfg.endOfficeId))S.cfg.endOfficeId='';$('offDel').textContent='Borrar esta oficina';syncOff();save();clearSegs()};
 const setOffLL=v=>{curOff().ll=v;syncOff();save()};
 
 /* Códigos: escoger el de Correos entre todos los leídos */
@@ -403,7 +421,7 @@ function schedule(){
     if(k<A.length){const a=A[k],al=parseLL(a.ll),st=toMin(a.start),en=toMin(a.end);const arr=t+travel(prev,al);
       res.arr.push({arr,late:st!=null&&arr>st+0.5,wait:st!=null?Math.max(0,st-arr):0,noLL:!al});t=Math.max(en??arr,arr);prev=al||prev}
   }
-  res.back=t+travel(prev,o);const lim=toMin(S.cfg.tEnd);res.lateBack=lim!=null&&res.back>lim;return res;
+  res.back=t+travel(prev,endLL()||o);const lim=toMin(S.cfg.tEnd);res.lateBack=lim!=null&&res.back>lim;return res;
 }
 function render(){
   normalizeOrder();
@@ -432,7 +450,7 @@ function render(){
       html+=`<li class="stop appt${r&&r.late?' late':''}"><div class="n">⌂</div><div><div class="ad">${esc(a.name||'Oficina rural')} · ${esc(a.start||'')}–${esc(a.end||'')}</div>
         <div class="meta">${sc.ok&&r?(r.late?`<b>Llegada ≈ ${hhmm(r.arr)}: tarde</b>`:`Llegada ≈ ${hhmm(r.arr)} · margen ${Math.round(r.wait)} min`):'Hora de llegada: localiza oficina y paradas'}${r&&r.noLL?' · <span class="tag no">sin coordenadas</span>':''}</div></div></li>`}
   }
-  html+=`<li class="stop edge${sc.lateBack?' late':''}"><div class="n">⌂</div><div><div class="ad">Vuelta · ${esc(o.name||'Oficina')}</div><div class="meta">${sc.ok&&pend.length?'≈ '+hhmm(sc.back)+(sc.lateBack?' · pasa de la hora límite':''):'—'}</div></div></li>`;
+  html+=`<li class="stop edge${sc.lateBack?' late':''}"><div class="n">⌂</div><div><div class="ad">Vuelta · ${esc(endOff().name||'Oficina')}</div><div class="meta">${sc.ok&&pend.length?'≈ '+hhmm(sc.back)+(sc.lateBack?' · pasa de la hora límite':''):'—'}</div></div></li>`;
   $('list').innerHTML=html;
 }
 $('list').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.dataset.i==null)return;const i=+b.dataset.i,a=b.dataset.a,L=S.stops,s=L[i];
@@ -554,11 +572,11 @@ $('perms').onclick=async()=>{const out=[];
   cfgMsg('Permisos — '+out.join(' · '),out.some(x=>/denegad/.test(x)))};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 $('geoAll').onclick=async()=>{
-  const todo=S.stops.filter(s=>!s.ll&&s.addr&&!s.done);const needOffice=!parseLL(S.cfg.officeLL)&&S.cfg.office;const aps=S.appts.filter(a=>a.on&&!a.ll&&(a.addr||a.name));
+  const todo=S.stops.filter(s=>!s.ll&&s.addr&&!s.done);const offs=[...new Set([curOff(),endOff()])].filter(x=>!x.ll&&x.addr);const needOffice=offs.length>0;const aps=S.appts.filter(a=>a.on&&!a.ll&&(a.addr||a.name));
   if(!todo.length&&!needOffice&&!aps.length){$('geoMsg').textContent='Todo lo pendiente ya está localizado.';return}
   $('geoAll').disabled=true;let ok=0,fail=0;$('geoMsg').className='msg';
   try{
-    if(needOffice){$('geoMsg').textContent='Localizando la oficina…';const r=await geocode(S.cfg.office);if(r)setOffLL(`${r.lat.toFixed(6)}, ${r.lon.toFixed(6)}`);await sleep(S.cfg.gkey?150:1100)}
+    for(const ofc of offs){$('geoMsg').textContent='Localizando '+(ofc.name||'la oficina')+'…';const r=await geocode(ofc.addr,true);if(r){ofc.ll=`${r.lat.toFixed(6)}, ${r.lon.toFixed(6)}`;syncOff();save()}else fail++;await sleep(S.cfg.gkey?150:1100)}
     for(const a of aps){$('geoMsg').textContent='Localizando '+a.name+'…';const r=await geocode(a.addr||a.name,true);if(r){a.ll=`${r.lat.toFixed(6)}, ${r.lon.toFixed(6)}`;save();render()}else fail++;await sleep(S.cfg.gkey?150:1100)}
     for(const s of todo){$('geoMsg').textContent=`Localizando ${ok+fail+1} de ${todo.length}…`;const r=await geocode(s.addr.split(',')[0].replace(/\b(local|piso|atico|ático|bajo)\b.*$/i,'').trim()||s.addr);r?(s.ll={lat:r.lat,lon:r.lon},ok++):fail++;save();render();await sleep(S.cfg.gkey?150:1100)}
     $('geoMsg').className='msg'+(fail?' err':'');$('geoMsg').textContent=`${ok} localizadas${fail?`, ${fail} sin encontrar: edítalas o fija el punto con GPS en la puerta`:''}.`;
@@ -574,7 +592,8 @@ function planRoute(){
   if(A.some(a=>!parseLL(a.ll)))return {err:'Localiza las oficinas rurales marcadas para hoy (o fija su punto con el GPS)'};
   const pend=S.stops.filter(s=>!s.done),geo=pend.filter(s=>s.ll),nog=pend.filter(s=>!s.ll),done=S.stops.filter(s=>s.done);
   if(!geo.length&&!m)return {err:'Hacen falta paradas localizadas'};
-  const P=[o,...A.map(a=>parseLL(a.ll)),o],T0=toMin(S.cfg.t0)??510,svc=svcMin(),lim=toMin(S.cfg.tEnd);
+  if(endOff()!==curOff()&&!endLL())return {err:'Localiza la oficina de vuelta (pulsa «Localizar direcciones»)'};
+  const P=[o,...A.map(a=>parseLL(a.ll)),endLL()||o],T0=toMin(S.cfg.t0)??510,svc=svcMin(),lim=toMin(S.cfg.tEnd);
   const start=k=>k===0?T0:Math.max(toMin(A[k-1].end),toMin(A[k-1].start)),dead=k=>k<m?toMin(A[k].start):(lim??Infinity);
   const legs=Array.from({length:m+1},()=>[]),avail=legs.map((_,k)=>dead(k)-start(k));
   const dur=k=>{let t=0,p=P[k];for(const s of legs[k]){t+=travel(p,s.ll)+svc;p=s.ll}return t+travel(p,P[k+1])};
@@ -613,7 +632,8 @@ $('mkSegs').onclick=()=>{
   if(!off){toast('Falta la dirección de la oficina');$('cfgBox').open=true;return}
   normalizeOrder();const A=activeAppts(),pend=S.stops.filter(s=>!s.done);if(!pend.length&&!A.length){toast('No hay paradas pendientes');return}
   const aP=a=>{const ll=parseLL(a.ll);return ll?`${ll.lat},${ll.lon}`:a.addr||a.name};
-  const ends=[{p:off,l:curOff().name||'Oficina'},...A.map(a=>({p:aP(a),l:`${a.name} (${a.start})`})),{p:off,l:curOff().name||'Oficina'}];
+  const eo=endOff(),eLL=parseLL(eo.ll),offEnd=eLL?`${eLL.lat},${eLL.lon}`:eo.addr;
+  const ends=[{p:off,l:curOff().name||'Oficina'},...A.map(a=>({p:aP(a),l:`${a.name} (${a.start})`})),{p:offEnd,l:eo.name||'Oficina'}];
   const max=+S.cfg.per+2;segLinks=[];let num=0;
   for(let k=0;k<=A.length;k++){
     const seq=[ends[k],...pend.filter(s=>legOf(s)===k).map(s=>({p:place(s),l:'parada '+(++num)})),ends[k+1]];
@@ -672,6 +692,7 @@ $('demo').onclick=()=>{importText(DEMO);toast('Ruta de ejemplo cargada (datos fi
 $('report').onclick=async()=>{const pend=S.stops.filter(s=>!s.done),sc=schedule();
   const t=[`Informe de prueba · Ruta de reparto ${APP_VERSION}`,`Fecha: ${new Date().toLocaleString('es-ES')}`,`Dispositivo: ${navigator.userAgent}`,
     `Instalada como app: ${matchMedia('(display-mode: standalone)').matches?'sí':'no'} · Lector nativo de códigos: ${'BarcodeDetector' in window?'sí':'no'}`,
+    `Salida: ${curOff().name} · vuelta: ${endOff().name}`,
     `Modo: ${({driving:"vehículo",walking:"a pie",bicycling:"bicicleta"})[S.cfg.mode]} · paradas por tramo: ${S.cfg.per} · OCR: ${S.cfg.ocrOn==='1'?'sí':'no'} · clave Google: ${S.cfg.gkey?'sí':'no'}`,
     `Paradas: ${S.stops.length} (pendientes ${pend.length}, localizadas ${S.stops.filter(s=>s.ll).length}) · bultos: ${S.stops.reduce((a,s)=>a+Math.max(1,s.codes.length),0)}`,
     `Oficinas rurales hoy: ${activeAppts().length} · vuelta estimada: ${sc.ok&&pend.length?hhmm(sc.back):'—'}`,
