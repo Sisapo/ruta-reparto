@@ -1,4 +1,4 @@
-# Ruta de reparto · versión de prueba 0.7.1-beta
+# Ruta de reparto · versión de prueba 0.8.0-beta
 
 App web instalable (PWA) para repartidores. Sirve para:
 
@@ -6,6 +6,9 @@ App web instalable (PWA) para repartidores. Sirve para:
 - juntar los bultos que van a la misma dirección,
 - elegir la oficina de Correos de salida y vuelta,
 - encajar las oficinas rurales con horario (por ejemplo, Puerto Lápice de 10:00 a 10:30),
+- priorizar obligados, registrados y ordinarios, y dejar para otro día lo que no cabe antes de la hora límite,
+- seguir el recorrido habitual por zonas y pasar por caminos concretos,
+- guardar aldeas, diseminados y calles que no salen en el mapa,
 - ordenar la ruta y abrirla en Google Maps por tramos.
 
 Todo se guarda solo en el móvil de cada persona. No hay servidor ni cuentas.

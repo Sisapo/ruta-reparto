@@ -1,4 +1,4 @@
-# Guía de pruebas · Ruta de reparto 0.7.1-beta
+# Guía de pruebas · Ruta de reparto 0.8.0-beta
 
 Gracias por probarla. Son unos 20 minutos. Al terminar, pulsa **Copiar informe de prueba** (sección *Datos*), pega el texto en el grupo de pruebas y completa las tres últimas líneas.
 
@@ -48,12 +48,15 @@ Usad la **ruta de ejemplo** (datos ficticios). Si probáis con paquetes reales, 
 - [ ] Pongo una **hora límite de vuelta** que no dé para todo y pulso **Optimizar orden**: los obligados siempre quedan; lo que no cabe pasa a «Para otro día», por zonas completas.
 - [ ] En **Zonas de hoy** pongo 2 o 3 aldeas en «Hoy sí, todo» y otras en «Solo obligados»: la ruta respeta esa elección.
 - [ ] «Repartir hoy» en una parada de «Para otro día» la vuelve a meter.
+- [ ] **Recorrido habitual:** marco «Seguir mi recorrido habitual» (o «Cargar recorrido rural de Malagón») y ordeno las zonas con las flechas. La ruta va zona por zona en ese orden.
+- [ ] **Puntos de paso:** añado a mano un camino o carretera (por ejemplo, Camino Hurtado) con prioridad «Punto de paso» para que Google Maps pase por ahí.
 
 ## 7. Aldeas y diseminados
 
 - [ ] Una calle que no sale en el mapa (por ejemplo, de una aldea) queda «aproximada (pueblo)».
 - [ ] En **Editar → Elegir en el mapa** (o «Estoy aquí (GPS)» en la puerta) fijo el punto. Con «Ver satélite» se ven las casas de campo.
 - [ ] Al guardar, aparece en **Oficina y ajustes → Lugares guardados**. Otro día, la misma calle se localiza sola.
+- [ ] En **Lugares guardados → Añadir lugar en el mapa** sitúo una aldea que el mapa no conoce (por ejemplo, Valdehierro o Quiles de Abajo).
 - [ ] **Copiar lugares** y pásalos al grupo; un compañero los añade con **Pegar lugares**.
 
 ## 8. Durante el reparto
