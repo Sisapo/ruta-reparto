@@ -1,4 +1,4 @@
-# Guía de pruebas · Ruta de reparto 0.6.1-beta
+# Guía de pruebas · Ruta de reparto 0.7.0-beta
 
 Gracias por probarla. Son unos 20 minutos. Al terminar, pulsa **Copiar informe de prueba** (sección *Datos*), pega el texto en el grupo de pruebas y completa las tres últimas líneas.
 
@@ -41,7 +41,22 @@ Usad la **ruta de ejemplo** (datos ficticios). Si probáis con paquetes reales, 
 - [ ] Si pongo una hora de salida muy tardía, avisa en rojo de que llego tarde.
 - [ ] Los tramos de Google Maps terminan en cada oficina rural.
 
-## 6. Durante el reparto
+## 6. Día con mucha carga (prioridades y zonas)
+
+- [ ] Cada parada muestra su prioridad (**Obligado**, **Registrado**, **Ordinario**). Al tocarla, cambia.
+- [ ] Marco como **Obligado** los que caducan o son último intento.
+- [ ] Pongo una **hora límite de vuelta** que no dé para todo y pulso **Optimizar orden**: los obligados siempre quedan; lo que no cabe pasa a «Para otro día», por zonas completas.
+- [ ] En **Zonas de hoy** pongo 2 o 3 aldeas en «Hoy sí, todo» y otras en «Solo obligados»: la ruta respeta esa elección.
+- [ ] «Repartir hoy» en una parada de «Para otro día» la vuelve a meter.
+
+## 7. Aldeas y diseminados
+
+- [ ] Una calle que no sale en el mapa (por ejemplo, de una aldea) queda «aproximada (pueblo)».
+- [ ] En **Editar → Elegir en el mapa** (o «Estoy aquí (GPS)» en la puerta) fijo el punto. Con «Ver satélite» se ven las casas de campo.
+- [ ] Al guardar, aparece en **Oficina y ajustes → Lugares guardados**. Otro día, la misma calle se localiza sola.
+- [ ] **Copiar lugares** y pásalos al grupo; un compañero los añade con **Pegar lugares**.
+
+## 8. Durante el reparto
 
 - [ ] Marco paradas como **Entregada** y desaparecen de los tramos al volver a generarlos.
 - [ ] Cierro la app y la vuelvo a abrir: la ruta sigue ahí.

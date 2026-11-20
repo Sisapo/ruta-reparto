@@ -1,4 +1,4 @@
-# Ruta de reparto · versión de prueba 0.6.1-beta
+# Ruta de reparto · versión de prueba 0.7.0-beta
 
 App web instalable (PWA) para repartidores. Sirve para:
 

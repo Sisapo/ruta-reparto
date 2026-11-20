@@ -81,6 +81,11 @@ ol.stops{list-style:none;margin:0;padding:0}
 .ap{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
 .offbar{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:10px;align-items:end;margin-top:14px;padding:12px;border:2px solid var(--ink);border-radius:10px}
 @media(max-width:600px){.offbar{grid-template-columns:minmax(0,1fr)}}
+.pr{font:700 12px Archivo;padding:2px 8px;border-radius:99px;border:1.5px solid currentColor;background:none;color:var(--mut);cursor:pointer;min-height:28px}
+.pr.obl{color:#fff;background:var(--red);border-color:var(--red)}.pr.reg{color:var(--ink)}
+.stop.out{opacity:.75}.stop.out .n{color:var(--mut)}
+.pl,.zn{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+.zn select{width:auto;min-width:150px}
 @media(prefers-reduced-motion:reduce){.toast{transition:none}}
 @media(max-width:600px){.stop{grid-template-columns:40px minmax(0,1fr)}.stop .n{font-size:26px}.acts{grid-column:1/-1;gap:4px}.acts .sm{padding:0 8px;font-size:13px;flex:1}}
 </style>
@@ -108,7 +113,7 @@ ol.stops{list-style:none;margin:0;padding:0}
       <div><label for="office">Dirección de la oficina</label><input id="office" placeholder="Calle, número, CP localidad"></div>
       <div><label for="officeLL">Coordenadas de la oficina (opcional)</label><input id="officeLL" placeholder="lat, lon" inputmode="decimal"></div>
     </div>
-    <div class="row"><button class="sm" id="offAdd">Añadir oficina</button><button class="sm" id="offDel">Borrar esta oficina</button><button class="sm" id="officeGps">Fijar con mi ubicación</button></div>
+    <div class="row"><button class="sm" id="offMap">Elegir oficina en el mapa</button><button class="sm" id="offAdd">Añadir oficina</button><button class="sm" id="offDel">Borrar esta oficina</button><button class="sm" id="officeGps">Fijar con mi ubicación</button></div>
     <div class="grid">
       <div><label for="town">Localidad por defecto (se añade a direcciones sin ella)</label><input id="town" placeholder="CP localidad, provincia"></div>
       <div><label for="mode">Tipo de reparto</label><select id="mode"><option value="driving">Vehículo</option><option value="walking">A pie</option><option value="bicycling">Bicicleta</option></select></div>
@@ -120,6 +125,10 @@ ol.stops{list-style:none;margin:0;padding:0}
     </div>
     <div class="row"><button class="sm" id="gkeyTest">Probar clave</button><button class="sm" id="perms">Dar permisos de cámara y GPS</button></div>
     <p class="msg" id="cfgMsg"></p>
+    <h3 style="margin:18px 0 4px;font:700 17px Archivo">Lugares guardados <small id="plCount" class="note"></small></h3>
+    <p class="note">Calles de aldeas, diseminados y casas que no salen en el mapa. Se guardan solos cuando fijas un punto con el GPS o en el mapa, y la próxima vez se localizan sin buscar. Puedes pasárselos a tus compañeros.</p>
+    <div id="plList"></div>
+    <div class="row"><button class="sm" id="plExp">Copiar lugares</button><button class="sm" id="plImp">Pegar lugares</button></div>
     <p class="note">Privacidad: la app solo guarda el código de envío y la dirección de entrega. No lee ni guarda nombres de destinatarios, y los datos no salen de este móvil salvo la dirección que se consulta al servicio de mapas.</p>
   </details>
 
@@ -129,10 +138,15 @@ ol.stops{list-style:none;margin:0;padding:0}
   <div class="grid" style="margin-top:10px">
     <div><label for="t0">Hora de salida</label><input id="t0" type="time"></div>
     <div><label for="speed">Velocidad media (km/h)</label><input id="speed" type="number" min="1" max="120" inputmode="decimal"></div>
-    <div><label for="svc">Minutos por entrega</label><input id="svc" type="number" min="0" max="30" inputmode="decimal"></div>
-    <div><label for="tEnd">Hora límite de vuelta (opcional)</label><input id="tEnd" type="time"></div>
+    <div><label for="svcReg">Minutos por registrado (firma)</label><input id="svcReg" type="number" min="0" max="30" step="0.5" inputmode="decimal"></div>
+    <div><label for="svcOrd">Minutos por ordinario o buzón</label><input id="svcOrd" type="number" min="0" max="30" step="0.5" inputmode="decimal"></div>
+    <div><label for="tEnd">Hora límite de vuelta (si no cabe todo, deja para otro día lo menos prioritario)</label><input id="tEnd" type="time"></div>
   </div>
   <div class="row"><button id="apAdd">Añadir oficina rural</button></div>
+
+  <h2>Zonas de hoy <small>aldeas y pueblos de la ruta</small></h2>
+  <p class="note">«Auto»: la app decide si no cabe todo. «Hoy sí»: se reparte todo lo de esa zona. «Solo obligados»: de esa zona solo se llevan los que caducan; el resto queda para otro día.</p>
+  <div id="zones"></div>
 
   <h2>Paradas <small id="pendTxt"></small></h2>
   <div class="row">
@@ -180,8 +194,9 @@ ol.stops{list-style:none;margin:0;padding:0}
   <label for="edCode">Código Correos / referencia</label><input id="edCode" autocomplete="off">
   <label for="edAddr">Dirección de entrega</label><textarea id="edAddr" rows="2" placeholder="Calle, número"></textarea>
   <label for="edLL">Coordenadas (opcional, para diseminados)</label><input id="edLL" placeholder="lat, lon" inputmode="decimal">
+  <label for="edPrio">Prioridad</label><select id="edPrio"><option value="obl">Obligado: caduca o último intento (siempre se reparte)</option><option value="reg">Registrado: certificado, notificación, paquete</option><option value="ord">Ordinario o buzón</option></select>
   <label for="edNote">Nota</label><input id="edNote" placeholder="Buzón, local, piso…">
-  <div class="row"><button class="sm" id="edGps">Estoy aquí (GPS)</button><button class="sm" id="edGeo">Localizar dirección</button></div>
+  <div class="row"><button class="sm" id="edGps">Estoy aquí (GPS)</button><button class="sm" id="edMap">Elegir en el mapa</button><button class="sm" id="edGeo">Localizar dirección</button></div>
   <div class="row"><button id="edCancel">Cancelar</button><button class="pri" id="edSave">Guardar parada</button></div>
 </div></div>
 
@@ -191,9 +206,17 @@ ol.stops{list-style:none;margin:0;padding:0}
   <label for="apAddr">Dirección del punto de atención</label><input id="apAddr" placeholder="Calle, número, localidad">
   <div class="grid"><div><label for="apStart">Abre</label><input id="apStart" type="time"></div><div><label for="apEnd">Cierra</label><input id="apEnd" type="time"></div></div>
   <label for="apLL">Coordenadas (opcional)</label><input id="apLL" placeholder="lat, lon" inputmode="decimal">
-  <div class="row"><button class="sm" id="apGps">Estoy aquí (GPS)</button><button class="sm" id="apGeo">Localizar dirección</button></div>
+  <div class="row"><button class="sm" id="apGps">Estoy aquí (GPS)</button><button class="sm" id="apMap">Elegir en el mapa</button><button class="sm" id="apGeo">Localizar dirección</button></div>
   <p class="msg" id="apMsg"></p>
   <div class="row"><button id="apCancel">Cancelar</button><button id="apDel">Borrar</button><button class="pri" id="apSave">Guardar</button></div>
+</div></div>
+
+<div class="ov" id="ovMap"><div class="sheet" style="max-width:760px">
+  <h3>Elige el punto en el mapa</h3>
+  <p class="note" id="mapTitle"></p>
+  <div id="map" style="height:min(60vh,520px);border-radius:10px;border:1.5px solid var(--line)"></div>
+  <p class="msg" id="mapMsg">Toca el mapa donde está la puerta o el acceso.</p>
+  <div class="row"><button id="mapLayer">Ver satélite (PNOA)</button><button id="mapCancel">Cancelar</button><button class="pri" id="mapOk">Usar este punto</button></div>
 </div></div>
 
 <div class="ov" id="ovImp"><div class="sheet">
@@ -211,16 +234,18 @@ ol.stops{list-style:none;margin:0;padding:0}
 {
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const APP_VERSION='0.6.1-beta';
+const APP_VERSION='0.7.0-beta';
 const KEY='rutaReparto.v1';
 const OFF0={id:'vdo',name:'Correos Villarrubia de los Ojos',addr:'Calle Tirante 43, 13670 Villarrubia de los Ojos, Ciudad Real',ll:''};
 const OFF1={id:'mal',name:'Correos Malagón',addr:'Calle Real 82, 13420 Malagón, Ciudad Real',ll:''};
-const DEF={offices:[OFF0,OFF1],officeId:'vdo',endOfficeId:'',office:OFF0.addr,officeLL:'',town:'13670 Villarrubia de los Ojos, Ciudad Real',mode:'driving',per:'9',ocrOn:'1',gkey:'',t0:'08:30',speed:'40',svc:'2',tEnd:''};
+const DEF={offices:[OFF0,OFF1],officeId:'vdo',endOfficeId:'',office:OFF0.addr,officeLL:'',town:'13670 Villarrubia de los Ojos, Ciudad Real',mode:'driving',per:'9',ocrOn:'1',gkey:'',t0:'08:30',speed:'40',svcReg:'3',svcOrd:'1',tEnd:''};
 const APPTS0=[{id:'plp',name:'Puerto Lápice',addr:'Puerto Lápice, Ciudad Real',ll:'',start:'10:00',end:'10:30',on:false},{id:'lab',name:'Las Labores',addr:'Las Labores, Ciudad Real',ll:'',start:'12:30',end:'12:45',on:false}];
 let S={cfg:{...DEF},stops:[],hideDone:false};
 try{const r=localStorage.getItem(KEY);if(r){const o=JSON.parse(r);S={...S,...o,cfg:{...DEF,...(o.cfg||{})}}}}catch(e){}
 S.stops.forEach(s=>{if(!s.codes){s.codes=s.code?[s.code]:[];delete s.code}delete s.names});
 if(!Array.isArray(S.appts))S.appts=APPTS0.map(a=>({...a}));
+if(!Array.isArray(S.places))S.places=[];
+if(!S.zones||typeof S.zones!=='object')S.zones={};
 if(!Array.isArray(S.cfg.offices)||!S.cfg.offices.length)S.cfg.offices=[{...OFF0}];
 if(!S.cfg.offices.some(o=>o.id===OFF1.id)&&!S.cfg.offices.some(o=>/malag/i.test(o.addr)))S.cfg.offices.push({...OFF1});
 if(!S.cfg.offices.some(o=>o.id===S.cfg.officeId))S.cfg.officeId=S.cfg.offices[0].id;
@@ -232,7 +257,7 @@ const parseLL=s=>{const m=String(s||'').match(/(-?\d{1,2}\.\d+)\s*[,; ]\s*(-?\d{
 const norm=a=>String(a||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\b(calle|c\/|cl|avda|avenida|plaza|pza|paseo|n[ºo°*]|numero)\b\.?/g,' ').replace(/[^a-z0-9]+/g,' ').trim();
 
 /* Ajustes */
-['town','mode','per','ocrOn','gkey','t0','speed','svc','tEnd'].forEach(k=>{const el=$(k);el.value=S.cfg[k]??el.value;el.addEventListener('change',()=>{S.cfg[k]=el.value.trim();
+['town','mode','per','ocrOn','gkey','t0','speed','svcReg','svcOrd','tEnd'].forEach(k=>{const el=$(k);el.value=S.cfg[k]??el.value;el.addEventListener('change',()=>{S.cfg[k]=el.value.trim();
   if(k==='mode'){const v=+S.cfg.speed||0;if(S.cfg.mode==='walking'&&v>10)S.cfg.speed='4.5';if(S.cfg.mode==='bicycling'&&(v>30||v<8))S.cfg.speed='15';if(S.cfg.mode==='driving'&&v<20)S.cfg.speed='40';$('speed').value=S.cfg.speed}
   if(k==='gkey')gmaps=null;save();render();clearSegs()})});
 
@@ -411,56 +436,74 @@ const nLegs=()=>activeAppts().length+1;
 const legOf=s=>Math.max(0,Math.min(s.leg||0,nLegs()-1));
 const spd=()=>Math.max(1,+S.cfg.speed||(S.cfg.mode==='walking'?4.5:40));
 const travel=(a,b)=>a&&b?hav(a,b)*1.35/spd()*60:0;
-const svcMin=()=>Math.max(0,+S.cfg.svc||0);
+const PR={obl:{t:'Obligado',w:Infinity},reg:{t:'Registrado',w:3},ord:{t:'Ordinario',w:1}};
+const prioOf=s=>PR[s.prio]?s.prio:(s.codes&&s.codes.length?'reg':'ord');
+const svcOf=s=>Math.max(0,+(prioOf(s)==='ord'?S.cfg.svcOrd:S.cfg.svcReg)||0);
+const live=s=>!s.done&&!s.out;
+/* Zona = pueblo o aldea de la dirección (parte con código postal); sin ella, la localidad por defecto */
+const zoneOf=s=>{const pl=String(s.addr||'').split(',').map(t=>t.trim()).slice(1).find(t=>/\b\d{5}\b/.test(t));const z=(pl||String(S.cfg.town).split(',')[0]).replace(/\b\d{5}\b/,'').replace(/\(.*?\)/g,'').trim();return z||'Sin zona'};
+const zoneMode=z=>S.zones[norm(z)]||'auto';
 function normalizeOrder(){S.stops=S.stops.map((s,i)=>[s,i]).sort((x,y)=>legOf(x[0])-legOf(y[0])||x[1]-y[1]).map(x=>x[0])}
 function schedule(){
   const A=activeAppts(),o=parseLL(S.cfg.officeLL),T0=toMin(S.cfg.t0)??510,res={eta:{},arr:[],back:null,ok:!!o};
   let t=T0,prev=o;
   for(let k=0;k<=A.length;k++){
-    for(const s of S.stops)if(!s.done&&legOf(s)===k){if(prev&&s.ll){t+=travel(prev,s.ll);res.eta[s.id]=t}prev=s.ll||prev;t+=svcMin()}
+    for(const s of S.stops)if(live(s)&&legOf(s)===k){if(prev&&s.ll){t+=travel(prev,s.ll);res.eta[s.id]=t}prev=s.ll||prev;t+=svcOf(s)}
     if(k<A.length){const a=A[k],al=parseLL(a.ll),st=toMin(a.start),en=toMin(a.end);const arr=t+travel(prev,al);
       res.arr.push({arr,late:st!=null&&arr>st+0.5,wait:st!=null?Math.max(0,st-arr):0,noLL:!al});t=Math.max(en??arr,arr);prev=al||prev}
   }
-  res.back=t+travel(prev,endLL()||o);const lim=toMin(S.cfg.tEnd);res.lateBack=lim!=null&&res.back>lim;return res;
+  res.back=t+travel(prev,endLL()||o);const lim=toMin(S.cfg.tEnd);res.lateBack=lim!=null&&res.back>lim+0.5;return res;
 }
 function render(){
   normalizeOrder();
-  const all=S.stops,pend=all.filter(s=>!s.done),bul=all.reduce((t,s)=>t+Math.max(1,s.codes.length),0),A=activeAppts(),sc=schedule(),per=+S.cfg.per;
+  const all=S.stops,pend=all.filter(live),outs=all.filter(s=>!s.done&&s.out),bul=all.reduce((t,s)=>t+Math.max(1,s.codes.length),0),A=activeAppts(),sc=schedule(),per=+S.cfg.per;
   let tr=0;for(let k=0;k<=A.length;k++){const n=pend.filter(s=>legOf(s)===k).length;tr+=Math.max(1,Math.ceil((n+1)/(per+1)))}
-  $('stats').innerHTML=[[pend.length,'paradas pendientes'],[bul,'bultos'],[all.filter(s=>s.ll).length+'/'+all.length,'localizadas'],[pend.length?tr:0,'tramos'],[sc.ok&&pend.length?hhmm(sc.back):'—','vuelta estimada']].map(([n,l])=>`<div><b>${n}</b><span>${l}</span></div>`).join('');
+  $('stats').innerHTML=[[pend.length,'paradas pendientes'],[bul,'bultos'],[all.filter(s=>s.ll).length+'/'+all.length,'localizadas'],[pend.length?tr:0,'tramos'],[sc.ok&&pend.length?hhmm(sc.back):'—','vuelta estimada'],[pend.filter(s=>prioOf(s)==='obl').length,'obligados'],...(outs.length?[[outs.length,'para otro día']]:[])].map(([n,l])=>`<div><b>${n}</b><span>${l}</span></div>`).join('');
   $('pendTxt').textContent=pend.length?`${pend.length} pendientes`:'';
   $('hideDone').textContent=S.hideDone?'Mostrar entregadas':'Ocultar entregadas';
-  renderAppts();
+  renderAppts();renderZones();renderPlaces();
   if(!all.length&&!A.length){$('list').innerHTML='<li class="empty">Sin paradas todavía. Pulsa Escanear para leer la primera etiqueta o añádela a mano.</li>';return}
   const o=curOff();let i=0,html=`<li class="stop edge"><div class="n">⌂</div><div><div class="ad">Salida · ${esc(o.name||'Oficina')}</div><div class="meta">${hhmm(toMin(S.cfg.t0)??510)}</div></div></li>`;
-  const row=(s,idx)=>{const num=s.done?'✓':++i;if(s.done&&S.hideDone)return'';const nb=s.codes.length,eta=sc.ok&&!s.done&&sc.eta[s.id]!=null?`<b>≈ ${hhmm(sc.eta[s.id])}</b> · `:'';
-    return `<li class="stop${s.done?' done':''}"><div class="n">${num}</div><div>
+  const row=(s,idx)=>{const num=s.done?'✓':s.out?'·':++i;if(s.done&&S.hideDone)return'';const nb=s.codes.length,eta=sc.ok&&!s.done&&sc.eta[s.id]!=null?`<b>≈ ${hhmm(sc.eta[s.id])}</b> · `:'';
+    const pr=prioOf(s);
+    return `<li class="stop${s.done?' done':''}${s.out?' out':''}"><div class="n">${num}</div><div>
       <div class="ad">${s.addr?esc(s.addr):'<span style="color:var(--red)">Falta dirección</span>'}</div>
-      <div class="meta">${eta}${nb>1?`<b>${nb} bultos</b> · `:''}${nb?esc(s.codes.join(', '))+' · ':''}${s.note?esc(s.note)+' · ':''}${s.ll?(s.approx?`<span class="tag no">aproximada (${s.approx})</span>`:'<span class="tag ok">localizada</span>'):'<span class="tag no">sin coordenadas</span>'}</div></div>
+      <div class="meta"><button class="pr ${pr}" data-a="prio" data-i="${idx}" title="Cambiar prioridad">${PR[pr].t}</button> ${eta}${nb>1?`<b>${nb} bultos</b> · `:''}${nb?esc(s.codes.join(', '))+' · ':''}${s.note?esc(s.note)+' · ':''}${s.ll?(s.approx?`<span class="tag no">aproximada (${s.approx})</span>`:'<span class="tag ok">localizada</span>'):'<span class="tag no">sin coordenadas</span>'}</div></div>
       <div class="acts">
-        <button class="sm" data-a="done" data-i="${idx}">${s.done?'Pendiente':'Entregada'}</button>
+        ${s.out&&!s.done?`<button class="sm" data-a="back" data-i="${idx}">Repartir hoy</button>`:`<button class="sm" data-a="done" data-i="${idx}">${s.done?'Pendiente':'Entregada'}</button>`}
         <button class="sm" data-a="up" data-i="${idx}" aria-label="Subir">↑</button>
         <button class="sm" data-a="down" data-i="${idx}" aria-label="Bajar">↓</button>
         <button class="sm" data-a="edit" data-i="${idx}">Editar</button>
         <button class="sm" data-a="del" data-i="${idx}" aria-label="Borrar">✕</button>
       </div></li>`};
   for(let k=0;k<=A.length;k++){
-    html+=all.map((s,idx)=>legOf(s)===k?row(s,idx):'').join('');
+    html+=all.map((s,idx)=>legOf(s)===k&&!(s.out&&!s.done)?row(s,idx):'').join('');
     if(k<A.length){const a=A[k],r=sc.arr[k];
       html+=`<li class="stop appt${r&&r.late?' late':''}"><div class="n">⌂</div><div><div class="ad">${esc(a.name||'Oficina rural')} · ${esc(a.start||'')}–${esc(a.end||'')}</div>
         <div class="meta">${sc.ok&&r?(r.late?`<b>Llegada ≈ ${hhmm(r.arr)}: tarde</b>`:`Llegada ≈ ${hhmm(r.arr)} · margen ${Math.round(r.wait)} min`):'Hora de llegada: localiza oficina y paradas'}${r&&r.noLL?' · <span class="tag no">sin coordenadas</span>':''}</div></div></li>`}
   }
   html+=`<li class="stop edge${sc.lateBack?' late':''}"><div class="n">⌂</div><div><div class="ad">Vuelta · ${esc(endOff().name||'Oficina')}</div><div class="meta">${sc.ok&&pend.length?'≈ '+hhmm(sc.back)+(sc.lateBack?' · pasa de la hora límite':''):'—'}</div></div></li>`;
+  if(outs.length)html+=`<li class="stop edge"><div class="n">↷</div><div><div class="ad">Para otro día · ${outs.length} parada${outs.length>1?'s':''}</div><div class="meta">No caben antes de la hora límite o su zona está en «Solo obligados». Se dejan por zonas completas, empezando por lo menos prioritario y más alejado.</div></div></li>`+all.map((s,idx)=>s.out&&!s.done?row(s,idx):'').join('');
   $('list').innerHTML=html;
 }
 $('list').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.dataset.i==null)return;const i=+b.dataset.i,a=b.dataset.a,L=S.stops,s=L[i];
   if(a==='done')s.done=!s.done;
+  if(a==='prio'){const o=['obl','reg','ord'];s.prio=o[(o.indexOf(prioOf(s))+1)%3]}
+  if(a==='back'){s.out=false;s.keep=true;s.leg=nLegs()-1;toast('Añadida a hoy. Pulsa «Optimizar orden» para colocarla.')}
   if(a==='up'){const p=L[i-1];if(p&&legOf(p)===legOf(s))[L[i-1],L[i]]=[s,p];else if(legOf(s)>0)s.leg=legOf(s)-1}
   if(a==='down'){const n=L[i+1];if(n&&legOf(n)===legOf(s))[L[i+1],L[i]]=[s,n];else if(legOf(s)<nLegs()-1)s.leg=legOf(s)+1}
   if(a==='edit')return openEdit(s);
   if(a==='del'){L.splice(i,1);toast('Parada borrada')}
   save();render();clearSegs()});
 $('hideDone').onclick=()=>{S.hideDone=!S.hideDone;save();render()};
+
+/* Zonas de hoy */
+function renderZones(){
+  const Z=new Map();for(const s of S.stops)if(!s.done){const z=zoneOf(s);if(!Z.has(z))Z.set(z,{obl:0,reg:0,ord:0,out:0});const c=Z.get(z);c[prioOf(s)]++;if(s.out)c.out++}
+  $('zones').innerHTML=Z.size?[...Z].sort((a,b)=>a[0].localeCompare(b[0],'es')).map(([z,c])=>`<div class="zn"><div><div class="ad">${esc(z)}</div><div class="meta">${c.obl?`<b style="color:var(--red)">${c.obl} obligado${c.obl>1?'s':''}</b> · `:''}${c.reg} registrado${c.reg===1?'':'s'} · ${c.ord} ordinario${c.ord===1?'':'s'}${c.out?` · ${c.out} para otro día`:''}</div></div>
+    <select data-zone="${esc(z)}" aria-label="Qué hacer en ${esc(z)}"><option value="auto"${zoneMode(z)==='auto'?' selected':''}>Auto</option><option value="si"${zoneMode(z)==='si'?' selected':''}>Hoy sí, todo</option><option value="no"${zoneMode(z)==='no'?' selected':''}>Solo obligados</option></select></div>`).join(''):'<p class="note">Las zonas aparecen al cargar paradas.</p>'}
+$('zones').addEventListener('change',e=>{const el=e.target.closest('[data-zone]');if(!el)return;const k=norm(el.dataset.zone);if(el.value==='auto')delete S.zones[k];else S.zones[k]=el.value;
+  S.stops.forEach(s=>{if(norm(zoneOf(s))===k)s.keep=false});save();render();clearSegs();toast('Pulsa «Optimizar orden» para aplicar las zonas')});
 
 /* Oficinas rurales con horario */
 function renderAppts(){
@@ -500,11 +543,11 @@ const msg=(t,err)=>{$('edMsg').className='msg'+(err?' err':'');$('edMsg').textCo
 function openEdit(stop,info){
   editing=stop||{id:uid(),codes:[],addr:'',ll:null,note:'',done:false,isNew:true};
   $('edTitle').textContent=editing.isNew?'Nueva parada':'Editar parada';
-  $('edCode').value=editing.codes.join(' | ');$('edAddr').value=editing.addr||'';$('edNote').value=editing.note||'';
+  $('edCode').value=editing.codes.join(' | ');$('edPrio').value=prioOf(editing);$('edAddr').value=editing.addr||'';$('edNote').value=editing.note||'';
   $('edLL').value=editing.ll?`${editing.ll.lat.toFixed(6)}, ${editing.ll.lon.toFixed(6)}`:'';
   const dup=editing.isNew&&editing.codes[0]&&S.stops.find(s=>s.codes.includes(editing.codes[0]));
   msg(dup?`Este código ya está en la ruta (${dup.addr||'sin dirección'}).`:(info||''),!!dup);
-  $('ovEdit').classList.add('on');
+  delete $('edLL').dataset.manual;$('ovEdit').classList.add('on');
 }
 function closeEdit(){$('ovEdit').classList.remove('on');editing=null;if(resumeScan){resumeScan=false;startLive()}}
 $('edCancel').onclick=closeEdit;
@@ -518,12 +561,13 @@ $('edSave').onclick=()=>{
     const same=S.stops.find(s=>!s.done&&addr&&norm(s.addr)===norm(addr));
     if(same){codes.forEach(c=>same.codes.includes(c)||same.codes.push(c));if(!same.ll&&ll)same.ll=ll;
       save();render();clearSegs();toast(`Misma dirección: añadido a la parada existente (${same.codes.length} bultos)`);return closeEdit()}
-    S.stops.push({id:editing.id,codes,addr,ll,note:$('edNote').value.trim(),done:false});toast('Parada añadida ('+S.stops.length+')');
-  }else{if(addr!==editing.addr||(ll&&JSON.stringify(ll)!==JSON.stringify(editing.ll)))editing.approx='';if(addr!==editing.addr&&!$('edLL').value.trim())editing.ll=null;Object.assign(editing,{codes,addr,ll:ll||editing.ll,note:$('edNote').value.trim()})}
+    S.stops.push({id:editing.id,codes,addr,ll,note:$('edNote').value.trim(),prio:$('edPrio').value,done:false});if(ll&&$('edLL').dataset.manual)savePlace(addr,ll);toast('Parada añadida ('+S.stops.length+')');
+  }else{if(addr!==editing.addr||(ll&&JSON.stringify(ll)!==JSON.stringify(editing.ll)))editing.approx='';if(addr!==editing.addr&&!$('edLL').value.trim())editing.ll=null;if(ll&&$('edLL').dataset.manual){savePlace(addr,ll);editing.approx=''}Object.assign(editing,{codes,addr,ll:ll||editing.ll,note:$('edNote').value.trim(),prio:$('edPrio').value})}
   save();render();clearSegs();closeEdit();
 };
 $('addMan').onclick=()=>openEdit();
-$('edGps').onclick=()=>gps(p=>{$('edLL').value=`${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}`;msg('Ubicación tomada.')},t=>msg(t,1));
+$('edLL').addEventListener('input',()=>$('edLL').dataset.manual='1');
+$('edGps').onclick=()=>gps(p=>{$('edLL').value=`${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}`;$('edLL').dataset.manual='1';msg('Ubicación tomada.')},t=>msg(t,1));
 $('edGeo').onclick=async()=>{const a=$('edAddr').value.trim();if(!a)return;msg('Buscando…');
   try{const r=await geocode(a);if(r){$('edLL').value=`${r.lat.toFixed(6)}, ${r.lon.toFixed(6)}`;msg('Encontrada: '+r.name)}else msg('No encontrada; prueba con otra forma o usa el GPS.',1)}
   catch(e){msg(NETERR,1)}};
@@ -550,12 +594,13 @@ function loadGmaps(){
 }
 async function gGeocode(a,raw){
   const {Geocoder}=await loadGmaps();
-  try{const r=await new Geocoder().geocode({address:raw?a:full(a),region:'es',componentRestrictions:{country:'ES'}});const x=r.results&&r.results[0];
+  try{const r=await new Geocoder().geocode({address:raw?a:full(a),region:'es',componentRestrictions:{country:'ES'},...(parseLL(S.cfg.officeLL)?{bounds:(o=>({south:o.lat-.35,north:o.lat+.35,west:o.lon-.45,east:o.lon+.45}))(parseLL(S.cfg.officeLL))}:{})});const x=r.results&&r.results[0];
     return x?{lat:x.geometry.location.lat(),lon:x.geometry.location.lng(),name:x.formatted_address,approx:x.geometry.location_type==='APPROXIMATE'}:null}
   catch(e){if(/ZERO_RESULTS/.test(String(e&&(e.code||e.message))))return null;throw e}
 }
 async function osmGeocode(a,raw){
-  const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=es&accept-language=es&q='+encodeURIComponent(raw?a:full(a)));
+  const o=parseLL(S.cfg.officeLL),vb=o?`&bounded=1&viewbox=${(o.lon-0.45).toFixed(4)},${(o.lat+0.35).toFixed(4)},${(o.lon+0.45).toFixed(4)},${(o.lat-0.35).toFixed(4)}`:'';
+  const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=es&accept-language=es'+vb+'&q='+encodeURIComponent(raw?a:full(a)));
   if(!r.ok)throw new Error('http');const j=await r.json();return j[0]?{lat:+j[0].lat,lon:+j[0].lon,name:j[0].display_name}:null}
 async function geocode(a,raw){
   if(S.cfg.gkey){try{return await gGeocode(a,raw)}catch(e){cfgMsg('Google no ha respondido ('+(e.code||e.message)+'); uso OpenStreetMap.',1)}}
@@ -571,21 +616,40 @@ $('perms').onclick=async()=>{const out=[];
   try{if(navigator.storage&&navigator.storage.persist)out.push(await navigator.storage.persist()?'datos: guardado permanente':'datos: guardado normal')}catch(e){}
   cfgMsg('Permisos — '+out.join(' · '),out.some(x=>/denegad/.test(x)))};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-/* Búsqueda escalonada: dirección exacta → calle sin número → calle en el pueblo → pueblo. Nunca cambia de pueblo. */
-async function locate(addr){
+/* Partes de una dirección: calle, calle sin número, pueblo */
+function parseAddr(addr){
   const parts=String(addr).split(',').map(t=>t.trim()).filter(Boolean);
   const street=(parts[0]||'').replace(/\b(local|piso|[aá]tico|bajo|portal|puerta|esc\.?)\b.*$/i,'').replace(/\bn[ºo°]\s*/i,'').trim();
   const place=parts.slice(1).find(t=>/\b\d{5}\b/.test(t))||'';
-  const town=(place||String(S.cfg.town).split(',')[0]).replace(/\b\d{5}\b/,'').trim();
+  const town=(place||String(S.cfg.town).split(',')[0]).replace(/\b\d{5}\b/,'').replace(/\(.*?\)/g,'').trim();
   const where=place||String(S.cfg.town).split(',')[0];
   const noNum=street.replace(/\s*(n[ºo°]\s*)?\d+\s*[A-Za-z]?$/,'').trim();
-  const tries=[[`${street}, ${where}`,''],[`${noNum}, ${where}`,'calle'],[`${street}, ${town}`,''],[`${noNum}, ${town}`,'calle'],[`${town}, ${String(S.cfg.town).split(',').slice(1).join(',')||'España'}`,'pueblo']];
-  const seen=new Set();
+  return {street,place,town,where,noNum,key:norm(street+' '+town),skey:norm(noNum+' '+town),tkey:norm(town)};
+}
+/* Lugares guardados: puntos fijados a mano (GPS o mapa) que el mapa no conoce */
+function savePlace(addr,ll){if(!addr||!ll)return;const P=parseAddr(addr);if(!P.key)return;
+  const e={addr,key:P.key,skey:P.skey,tkey:P.tkey,ll:{lat:+(+ll.lat).toFixed(6),lon:+(+ll.lon).toFixed(6)}};
+  const i=S.places.findIndex(x=>x.key===e.key);if(i>=0)S.places[i]=e;else S.places.push(e);save();renderPlaces();toast('Punto guardado para próximas rutas')}
+function renderPlaces(){if(!$('plList'))return;$('plCount').textContent=S.places.length?`(${S.places.length})`:'';
+  $('plList').innerHTML=S.places.length?[...S.places].sort((a,b)=>a.addr.localeCompare(b.addr,'es')).map(x=>`<div class="pl"><span>${esc(x.addr)}</span><button class="sm" data-pl="${esc(x.key)}" aria-label="Borrar lugar">✕</button></div>`).join(''):'<p class="note">Aún no hay lugares guardados.</p>'}
+$('plList').addEventListener('click',e=>{const b=e.target.closest('[data-pl]');if(!b)return;S.places=S.places.filter(x=>x.key!==b.dataset.pl);save();renderPlaces()});
+/* Búsqueda escalonada: lugar guardado → dirección exacta → calle sin número → calle en el pueblo → pueblo. Nunca cambia de pueblo. */
+async function locate(addr){
+  const P=parseAddr(addr);
+  const ex=S.places.find(x=>x.key===P.key);if(ex)return {...ex.ll,name:'Lugar guardado',level:''};
+  const st=S.places.find(x=>x.skey===P.skey&&P.skey!==P.tkey);if(st)return {...st.ll,name:'Calle guardada',level:'calle guardada'};
+  const prov=String(S.cfg.town).split(',').slice(1).join(',').trim()||'España';
+  const tries=[[`${P.street}, ${P.where}`,''],[`${P.noNum}, ${P.where}`,'calle'],[`${P.street}, ${P.town}`,''],[`${P.noNum}, ${P.town}`,'calle'],[`${P.town}, ${prov}`,'pueblo']];
+  const seen=new Set(),tw=norm(P.town).split(' ').sort((x,y)=>y.length-x.length)[0]||'';
+  let found=null;
   for(const [q,level] of tries){if(!q.replace(/[ ,]/g,'')||seen.has(q))continue;seen.add(q);
     const r=await geocode(q,true);await sleep(S.cfg.gkey?150:1100);
-    if(r&&(!town||!r.name||norm(r.name).includes(norm(town).split(' ').sort((x,y)=>y.length-x.length)[0])))return {...r,level}}
-  return null;
+    if(r&&(!tw||!r.name||norm(r.name).includes(tw))){found={...r,level};break}}
+  if(!found||found.level==='pueblo'){const same=S.places.filter(x=>x.tkey===P.tkey);
+    if(same.length)return {lat:same.reduce((t,x)=>t+x.ll.lat,0)/same.length,lon:same.reduce((t,x)=>t+x.ll.lon,0)/same.length,name:'Lugares guardados del pueblo',level:'pueblo'}}
+  return found;
 }
+
 $('geoAll').onclick=async()=>{
   const todo=S.stops.filter(s=>!s.ll&&s.addr&&!s.done);const offs=[...new Set([curOff(),endOff()])].filter(x=>!x.ll&&x.addr);const needOffice=offs.length>0;const aps=S.appts.filter(a=>a.on&&!a.ll&&(a.addr||a.name));
   if(!todo.length&&!needOffice&&!aps.length){$('geoMsg').textContent='Todo lo pendiente ya está localizado.';return}
@@ -605,37 +669,60 @@ function planRoute(){
   const o=parseLL(S.cfg.officeLL);if(!o)return {err:'Pulsa «Localizar direcciones» o indica las coordenadas de la oficina'};
   const A=activeAppts(),m=A.length;
   if(A.some(a=>!parseLL(a.ll)))return {err:'Localiza las oficinas rurales marcadas para hoy (o fija su punto con el GPS)'};
-  const pend=S.stops.filter(s=>!s.done),geo=pend.filter(s=>s.ll),nog=pend.filter(s=>!s.ll),done=S.stops.filter(s=>s.done);
-  if(!geo.length&&!m)return {err:'Hacen falta paradas localizadas'};
   if(endOff()!==curOff()&&!endLL())return {err:'Localiza la oficina de vuelta (pulsa «Localizar direcciones»)'};
-  const P=[o,...A.map(a=>parseLL(a.ll)),endLL()||o],T0=toMin(S.cfg.t0)??510,svc=svcMin(),lim=toMin(S.cfg.tEnd);
+  const cand=S.stops.filter(s=>!s.done),done=S.stops.filter(s=>s.done);
+  cand.forEach(s=>{s.out=!s.keep&&prioOf(s)!=='obl'&&zoneMode(zoneOf(s))==='no'});
+  const outs=cand.filter(s=>s.out),pend=cand.filter(s=>!s.out),geo=pend.filter(s=>s.ll),nog=pend.filter(s=>!s.ll);
+  if(!geo.length&&!m)return {err:'Hacen falta paradas localizadas'};
+  const P=[o,...A.map(a=>parseLL(a.ll)),endLL()||o],T0=toMin(S.cfg.t0)??510,lim=toMin(S.cfg.tEnd);
   const start=k=>k===0?T0:Math.max(toMin(A[k-1].end),toMin(A[k-1].start)),dead=k=>k<m?toMin(A[k].start):(lim??Infinity);
   const legs=Array.from({length:m+1},()=>[]),avail=legs.map((_,k)=>dead(k)-start(k));
-  const dur=k=>{let t=0,p=P[k];for(const s of legs[k]){t+=travel(p,s.ll)+svc;p=s.ll}return t+travel(p,P[k+1])};
+  const dur=k=>{let t=0,p=P[k];for(const s of legs[k]){t+=travel(p,s.ll)+svcOf(s);p=s.ll}return t+travel(p,P[k+1])};
   const D=legs.map((_,k)=>dur(k));let forced=0;
+  const insertCheapest=(d,allowLate)=>{let best=null;for(let k=0;k<=m;k++){const R=legs[k];for(let pos=0;pos<=R.length;pos++){
+      const pv=pos?R[pos-1].ll:P[k],nx=pos<R.length?R[pos].ll:P[k+1],delta=travel(pv,d.ll)+travel(d.ll,nx)-travel(pv,nx)+svcOf(d);
+      const cost=delta*(k===m&&m>0?1.15:1);if((allowLate&&k===m||D[k]+delta<=avail[k]+1e-6)&&(!best||cost<best.cost))best={k,pos,cost}}}
+    return best};
   const left=new Set(geo);
-  while(left.size){let best=null;
-    for(const d of left)for(let k=0;k<=m;k++){const R=legs[k];for(let pos=0;pos<=R.length;pos++){
-      const pv=pos?R[pos-1].ll:P[k],nx=pos<R.length?R[pos].ll:P[k+1],delta=travel(pv,d.ll)+travel(d.ll,nx)-travel(pv,nx)+svc;
-      const cost=delta*(k===m&&m>0?1.15:1);if(D[k]+delta<=avail[k]+1e-6&&(!best||cost<best.delta))best={d,k,pos,delta:cost}}}
-    if(!best){forced++;const k=m;let bp=0,bd=Infinity;const R=legs[k];const d=[...left][0];
-      for(let pos=0;pos<=R.length;pos++){const pv=pos?R[pos-1].ll:P[k],nx=pos<R.length?R[pos].ll:P[k+1],dl=travel(pv,d.ll)+travel(d.ll,nx)-travel(pv,nx);if(dl<bd){bd=dl;bp=pos}}
-      best={d,k,pos:bp}}
-    legs[best.k].splice(best.pos,0,best.d);left.delete(best.d);D[best.k]=dur(best.k);
+  while(left.size){let best=null,bd=null;
+    for(const d of left){const b=insertCheapest(d,false);if(b&&(!best||b.cost<best.cost)){best=b;bd=d}}
+    if(!best){forced++;bd=[...left][0];best=insertCheapest(bd,true)}
+    legs[best.k].splice(best.pos,0,bd);left.delete(bd);D[best.k]=dur(best.k);
   }
-  for(let k=0;k<=m;k++){let R=legs[k],imp=true,g=0;const pt=i=>i<0?P[k]:i>=R.length?P[k+1]:R[i].ll;
+  const twoOpt=k=>{let R=legs[k],imp=true,g=0;const pt=i=>i<0?P[k]:i>=R.length?P[k+1]:R[i].ll;
     while(imp&&g++<200){imp=false;for(let i=0;i<R.length-1;i++)for(let j=i+1;j<R.length;j++){
       if(hav(pt(i-1),pt(j))+hav(pt(i),pt(j+1))<hav(pt(i-1),pt(i))+hav(pt(j),pt(j+1))-1e-9){R=[...R.slice(0,i),...R.slice(i,j+1).reverse(),...R.slice(j+1)];imp=true}}}
-    legs[k]=R}
-  legs.forEach((R,k)=>R.forEach(s=>s.leg=k));nog.forEach(s=>s.leg=m);
-  S.stops=[...legs.flat(),...nog,...done];
+    legs[k]=R};
+  for(let k=0;k<=m;k++)twoOpt(k);
+  const trimmed=[];
+  const apply=()=>{legs.forEach((R,k)=>R.forEach(s=>{s.leg=k;s.out=false}));nog.forEach(s=>{s.leg=m;s.out=false});[...outs,...trimmed].forEach(s=>s.out=true);
+    S.stops=[...legs.flat(),...nog,...outs,...trimmed,...done]};
+  const fval=()=>{const sc=schedule();return sc.back+3*sc.arr.reduce((t,r,k)=>t+(r.late?r.arr-toMin(A[k].start):0),0)};
+  apply();
+  /* Si no cabe todo antes de la hora límite: dejar zonas completas, empezando por lo que más tiempo ahorra por unidad de prioridad */
+  const removable=s=>prioOf(s)!=='obl'&&!s.keep&&zoneMode(zoneOf(s))!=='si';
+  if(lim!=null){let guard=0;
+    while(schedule().back>lim+0.5&&guard++<120){
+      const G=new Map();legs.forEach((R,k)=>R.forEach(s=>{if(!removable(s))return;const key=k+'|'+zoneOf(s)+'|'+Math.round(s.ll.lat/0.004)+'_'+Math.round(s.ll.lon/0.005)+'|'+prioOf(s);if(!G.has(key))G.set(key,[]);G.get(key).push(s)}));
+      if(!G.size)break;const base=fval();let best=null;
+      for(const grp of G.values()){const keep=legs.map(R=>R);for(let k=0;k<=m;k++)legs[k]=keep[k].filter(s=>!grp.includes(s));apply();const gain=base-fval();
+        for(let k=0;k<=m;k++)legs[k]=keep[k];const w=grp.reduce((t,s)=>t+PR[prioOf(s)].w,0),sc=gain/w;if(gain>0.01&&(!best||sc>best.sc))best={grp,sc}}
+      apply();if(!best)break;
+      for(let k=0;k<=m;k++){legs[k]=legs[k].filter(s=>!best.grp.includes(s));twoOpt(k)}trimmed.push(...best.grp);apply();
+    }
+    /* Recuperar lo que aún quepa, primero lo más prioritario */
+    for(const s of [...trimmed].sort((a,b)=>PR[prioOf(b)].w-PR[prioOf(a)].w)){
+      const b=insertCheapest(s,true);if(!b)continue;const before=fval();legs[b.k].splice(b.pos,0,s);trimmed.splice(trimmed.indexOf(s),1);apply();
+      if(schedule().back>lim+0.5||fval()>Math.max(before,lim)+0.5){legs[b.k].splice(b.pos,1);trimmed.push(s);apply()}}
+    for(let k=0;k<=m;k++)twoOpt(k);apply();
+  }
   const km=legs.reduce((t,R,k)=>{let p=P[k];for(const s of R){t+=hav(p,s.ll);p=s.ll}return t+hav(p,P[k+1])},0);
-  return {km,nog:nog.length,forced,m};
+  return {km,nog:nog.length,forced,m,out:outs.length+trimmed.length,zoneOut:outs.length,trimmed:trimmed.length};
 }
 $('opt').onclick=()=>{const r=planRoute();if(r.err){toast(r.err);if(/oficina/.test(r.err))$('cfgBox').open=true;return}
   save();render();clearSegs();const sc=schedule(),late=sc.arr.filter(x=>x.late).length;
   $('geoMsg').className='msg'+(late||sc.lateBack?' err':'');
-  $('geoMsg').textContent=`Orden optimizado: unos ${r.km.toFixed(1)} km en línea recta, vuelta ≈ ${hhmm(sc.back)}.`+(r.m?` ${r.m} oficina${r.m>1?'s':''} rural${r.m>1?'es':''} con horario.`:'')+(late?` Atención: ${late} oficina${late>1?'s':''} rural${late>1?'es':''} con llegada tarde; adelanta la salida o mueve entregas.`:'')+(sc.lateBack?' La vuelta pasa de la hora límite.':'')+(r.nog?` ${r.nog} sin coordenadas quedan al final.`:'');
+  $('geoMsg').textContent=`Orden optimizado: unos ${r.km.toFixed(1)} km en línea recta, vuelta ≈ ${hhmm(sc.back)}.`+(r.m?` ${r.m} oficina${r.m>1?'s':''} rural${r.m>1?'es':''} con horario.`:'')+(late?` Atención: ${late} oficina${late>1?'s':''} rural${late>1?'es':''} con llegada tarde; adelanta la salida o mueve entregas.`:'')+(sc.lateBack?' La vuelta pasa de la hora límite.':'')+(r.out?` Quedan ${r.out} para otro día${r.zoneOut?` (${r.zoneOut} por zonas en «Solo obligados»)`:''}.`:'')+(r.nog?` ${r.nog} sin coordenadas quedan al final.`:'');
 };
 
 /* Tramos de Google Maps: uno o varios por cada tramo entre oficinas */
@@ -645,7 +732,7 @@ function clearSegs(){segLinks=[];$('segs').innerHTML='';$('segInfo').textContent
 $('mkSegs').onclick=()=>{
   const oLL=parseLL(S.cfg.officeLL),off=oLL?`${oLL.lat},${oLL.lon}`:S.cfg.office;
   if(!off){toast('Falta la dirección de la oficina');$('cfgBox').open=true;return}
-  normalizeOrder();const A=activeAppts(),pend=S.stops.filter(s=>!s.done);if(!pend.length&&!A.length){toast('No hay paradas pendientes');return}
+  normalizeOrder();const A=activeAppts(),pend=S.stops.filter(live);if(!pend.length&&!A.length){toast('No hay paradas pendientes');return}
   const aP=a=>{const ll=parseLL(a.ll);return ll?`${ll.lat},${ll.lon}`:a.addr||a.name};
   const eo=endOff(),eLL=parseLL(eo.ll),offEnd=eLL?`${eLL.lat},${eLL.lon}`:eo.addr;
   const ends=[{p:off,l:curOff().name||'Oficina'},...A.map(a=>({p:aP(a),l:`${a.name} (${a.start})`})),{p:offEnd,l:eo.name||'Oficina'}];
@@ -662,11 +749,37 @@ $('mkSegs').onclick=()=>{
 $('copyAll').onclick=async()=>{if(!segLinks.length)return toast('Genera los tramos primero');
   try{await navigator.clipboard.writeText(segLinks.map((s,i)=>`Tramo ${i+1} (${s.from} → ${s.to}): ${s.u}`).join('\n'));toast('Enlaces copiados')}catch(e){toast('No se pudo copiar')}};
 
+/* Mapa para fijar puntos (Leaflet + OpenStreetMap / ortofoto PNOA del IGN) */
+let lMap=null,lMark=null,lLayers=null,lSat=false,lCb=null,lPick=null;
+function loadLeaflet(){if(window.L)return Promise.resolve();return new Promise((res,rej)=>{const c=document.createElement('link');c.rel='stylesheet';c.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(c);
+  const s=document.createElement('script');s.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';s.onload=()=>res();s.onerror=()=>rej(new Error('net'));document.head.appendChild(s)})}
+async function openMap(title,ll,cb){
+  $('mapTitle').textContent=title||'';$('ovMap').classList.add('on');$('mapMsg').className='msg';$('mapMsg').textContent='Cargando mapa…';
+  try{await loadLeaflet()}catch(e){$('mapMsg').className='msg err';$('mapMsg').textContent='No se pudo cargar el mapa: hace falta conexión.';return}
+  if(!lMap){lMap=L.map('map',{zoomControl:true});
+    lLayers={osm:L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}),
+      sat:L.tileLayer('https://www.ign.es/wmts/pnoa-ma?request=GetTile&service=WMTS&version=1.0.0&Layer=OI.OrthoimageCoverage&Style=default&Format=image/jpeg&TileMatrixSet=GoogleMapsCompatible&TileMatrix={z}&TileRow={y}&TileCol={x}',{maxZoom:20,attribution:'PNOA cedido por © Instituto Geográfico Nacional'})};
+    lLayers.osm.addTo(lMap);lMap.on('click',e=>{lPick=e.latlng;if(lMark)lMark.setLatLng(e.latlng);else lMark=L.marker(e.latlng).addTo(lMap);$('mapMsg').textContent=`Punto: ${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`})}
+  lCb=cb;lPick=null;if(lMark){lMark.remove();lMark=null}
+  const c=ll||parseLL(S.cfg.officeLL)||{lat:39.17,lon:-3.85};lMap.setView([c.lat,c.lon],ll?18:14);
+  if(ll){lPick={lat:ll.lat,lng:ll.lon};lMark=L.marker([ll.lat,ll.lon]).addTo(lMap)}
+  setTimeout(()=>lMap.invalidateSize(),60);$('mapMsg').textContent='Toca el mapa donde está la puerta o el acceso. Usa «Ver satélite» para casas de campo.';
+}
+$('mapLayer').onclick=()=>{if(!lMap)return;lSat=!lSat;if(lSat){lMap.removeLayer(lLayers.osm);lLayers.sat.addTo(lMap)}else{lMap.removeLayer(lLayers.sat);lLayers.osm.addTo(lMap)}$('mapLayer').textContent=lSat?'Ver mapa':'Ver satélite (PNOA)'};
+$('mapCancel').onclick=()=>{$('ovMap').classList.remove('on');lCb=null};
+$('mapOk').onclick=()=>{if(!lPick){$('mapMsg').className='msg err';$('mapMsg').textContent='Toca primero un punto del mapa.';return}const v=`${lPick.lat.toFixed(6)}, ${lPick.lng.toFixed(6)}`;$('ovMap').classList.remove('on');if(lCb)lCb(v);lCb=null};
+$('edMap').onclick=()=>openMap('Parada: '+($('edAddr').value||'sin dirección'),parseLL($('edLL').value),v=>{$('edLL').value=v;$('edLL').dataset.manual='1';msg('Punto elegido en el mapa. Se guardará para próximas rutas.')});
+$('apMap').onclick=()=>openMap('Oficina rural: '+($('apName').value||''),parseLL($('apLL').value),v=>{$('apLL').value=v;apMsg('Punto elegido en el mapa.')});
+$('offMap').onclick=()=>openMap('Oficina: '+(curOff().name||''),parseLL(curOff().ll),v=>{setOffLL(v);toast('Oficina situada en el mapa')});
+
 /* Datos */
 const cell=x=>String(x??'').replace(/[;\n]/g,',');
-$('exp').onclick=async()=>{const t='codigos;direccion;lat;lon;nota;entregada\n'+S.stops.map(s=>[s.codes.join('|'),s.addr,s.ll?.lat??'',s.ll?.lon??'',s.note,s.done?'si':'no'].map(cell).join(';')).join('\n');
+$('exp').onclick=async()=>{const t='codigos;direccion;lat;lon;nota;entregada;prioridad\n'+S.stops.map(s=>[s.codes.join('|'),s.addr,s.ll?.lat??'',s.ll?.lon??'',s.note,s.done?'si':'no',prioOf(s)].map(cell).join(';')).join('\n');
   try{await navigator.clipboard.writeText(t);toast('Lista copiada')}catch(e){toast('No se pudo copiar')}};
-$('imp').onclick=()=>{$('impTxt').value='';$('ovImp').classList.add('on')};
+let impMode='stops';
+$('imp').onclick=()=>{impMode='stops';$('impTxt').value='';$('ovImp').classList.add('on')};
+$('plImp').onclick=()=>{impMode='places';$('impTxt').value='';$('impTxt').placeholder='dirección;lat;lon (una por línea)';$('ovImp').classList.add('on')};
+$('plExp').onclick=async()=>{const t=S.places.map(x=>[x.addr,x.ll.lat,x.ll.lon].map(cell).join(';')).join('\n');if(!t)return toast('No hay lugares guardados');try{await navigator.clipboard.writeText(t);toast('Lugares copiados: pásalos a tus compañeros')}catch(e){toast('No se pudo copiar')}};
 $('impCancel').onclick=()=>$('ovImp').classList.remove('on');
 function importText(txt){let n=0,m=0;txt.split('\n').map(l=>l.trim()).filter(l=>l&&!/^codigo/i.test(l)).forEach(l=>{
   const c=l.split(';').map(x=>x.trim());if(c.length===1)c.unshift('');
@@ -675,9 +788,10 @@ function importText(txt){let n=0,m=0;txt.split('\n').map(l=>l.trim()).filter(l=>
   if(codes.length&&codes.every(k=>S.stops.some(s=>s.codes.includes(k))))return;
   const same=addr&&S.stops.find(s=>!s.done&&norm(s.addr)===norm(addr));
   if(same){codes.forEach(k=>same.codes.includes(k)||same.codes.push(k));if(c[4]&&!same.note)same.note=c[4];m++;return}
-  S.stops.push({id:uid(),codes,addr,ll,note:c[4]||'',done:/^s/i.test(c[5]||'')});n++});
+  const pz=(c[6]||'').toLowerCase(),nt=(c[4]||'').toLowerCase();const prio=PR[pz]?pz:/obligad|caduc|[uú]ltimo intento/.test(nt)?'obl':/ordinari|buz[oó]n|no registrad/.test(nt)?'ord':(codes.length?'reg':'ord');
+  S.stops.push({id:uid(),codes,addr,ll,note:c[4]||'',prio,done:/^s/i.test(c[5]||'')});n++});
   save();render();clearSegs();toast(`${n} paradas añadidas${m?`, ${m} bultos unidos a paradas existentes`:''}`)}
-$('impOk').onclick=()=>{importText($('impTxt').value);$('ovImp').classList.remove('on')};
+$('impOk').onclick=()=>{if(impMode==='places'){let n=0;$('impTxt').value.split('\n').forEach(l=>{const c=l.split(';').map(x=>x.trim());const ll=parseLL(`${c[1]}, ${c[2]}`);if(c[0]&&ll){const P=parseAddr(c[0]);const e={addr:c[0],key:P.key,skey:P.skey,tkey:P.tkey,ll};const i=S.places.findIndex(x=>x.key===e.key);if(i>=0)S.places[i]=e;else S.places.push(e);n++}});save();renderPlaces();toast(n+' lugares añadidos');impMode='stops';$('impTxt').placeholder=''}else importText($('impTxt').value);$('ovImp').classList.remove('on')};
 const DEMO=`codigo;direccion;lat;lon;nota
 DEMO0001;Calle Convento 12;;;Dato de prueba
 DEMO0002;Calle Logroño 5;;;Dato de prueba
