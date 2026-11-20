@@ -1,4 +1,4 @@
-# Guía de pruebas · Ruta de reparto 0.7.0-beta
+# Guía de pruebas · Ruta de reparto 0.7.1-beta
 
 Gracias por probarla. Son unos 20 minutos. Al terminar, pulsa **Copiar informe de prueba** (sección *Datos*), pega el texto en el grupo de pruebas y completa las tres últimas líneas.
 

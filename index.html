@@ -234,7 +234,7 @@ ol.stops{list-style:none;margin:0;padding:0}
 {
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const APP_VERSION='0.7.0-beta';
+const APP_VERSION='0.7.1-beta';
 const KEY='rutaReparto.v1';
 const OFF0={id:'vdo',name:'Correos Villarrubia de los Ojos',addr:'Calle Tirante 43, 13670 Villarrubia de los Ojos, Ciudad Real',ll:''};
 const OFF1={id:'mal',name:'Correos Malagón',addr:'Calle Real 82, 13420 Malagón, Ciudad Real',ll:''};
@@ -602,6 +602,13 @@ async function osmGeocode(a,raw){
   const o=parseLL(S.cfg.officeLL),vb=o?`&bounded=1&viewbox=${(o.lon-0.45).toFixed(4)},${(o.lat+0.35).toFixed(4)},${(o.lon+0.45).toFixed(4)},${(o.lat-0.35).toFixed(4)}`:'';
   const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=es&accept-language=es'+vb+'&q='+encodeURIComponent(raw?a:full(a)));
   if(!r.ok)throw new Error('http');const j=await r.json();return j[0]?{lat:+j[0].lat,lon:+j[0].lon,name:j[0].display_name}:null}
+async function geocodeAll(q){
+  if(S.cfg.gkey){try{const {Geocoder}=await loadGmaps();const o=parseLL(S.cfg.officeLL);const r=await new Geocoder().geocode({address:q,region:'es',componentRestrictions:{country:'ES'},...(o?{bounds:{south:o.lat-.35,north:o.lat+.35,west:o.lon-.45,east:o.lon+.45}}:{})});
+    return (r.results||[]).map(x=>({lat:x.geometry.location.lat(),lon:x.geometry.location.lng(),name:x.formatted_address}))}catch(e){}}
+  const o=parseLL(S.cfg.officeLL),vb=o?`&bounded=1&viewbox=${(o.lon-0.45).toFixed(4)},${(o.lat+0.35).toFixed(4)},${(o.lon+0.45).toFixed(4)},${(o.lat-0.35).toFixed(4)}`:'';
+  const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=6&countrycodes=es&accept-language=es'+vb+'&q='+encodeURIComponent(q));
+  if(!r.ok)throw new Error('http');return (await r.json()).map(x=>({lat:+x.lat,lon:+x.lon,name:x.display_name}));
+}
 async function geocode(a,raw){
   if(S.cfg.gkey){try{return await gGeocode(a,raw)}catch(e){cfgMsg('Google no ha respondido ('+(e.code||e.message)+'); uso OpenStreetMap.',1)}}
   return osmGeocode(a,raw);
@@ -639,12 +646,16 @@ async function locate(addr){
   const ex=S.places.find(x=>x.key===P.key);if(ex)return {...ex.ll,name:'Lugar guardado',level:''};
   const st=S.places.find(x=>x.skey===P.skey&&P.skey!==P.tkey);if(st)return {...st.ll,name:'Calle guardada',level:'calle guardada'};
   const prov=String(S.cfg.town).split(',').slice(1).join(',').trim()||'España';
-  const tries=[[`${P.street}, ${P.where}`,''],[`${P.noNum}, ${P.where}`,'calle'],[`${P.street}, ${P.town}`,''],[`${P.noNum}, ${P.town}`,'calle'],[`${P.town}, ${prov}`,'pueblo']];
+  const tries=[[`${P.street}, ${P.where}`,''],[`${P.noNum}, ${P.where}`,'calle'],[`${P.street}, ${P.town}`,''],[`${P.noNum}, ${P.town}`,'calle']];
   const seen=new Set(),tw=norm(P.town).split(' ').sort((x,y)=>y.length-x.length)[0]||'';
   let found=null;
   for(const [q,level] of tries){if(!q.replace(/[ ,]/g,'')||seen.has(q))continue;seen.add(q);
     const r=await geocode(q,true);await sleep(S.cfg.gkey?150:1100);
     if(r&&(!tw||!r.name||norm(r.name).includes(tw))){found={...r,level};break}}
+  if(!found&&P.town){const o=parseLL(S.cfg.officeLL),bare=P.town.replace(/^(el|la|los|las)\s+/i,'');let cands=[];
+    for(const q of [...new Set([`${P.town}, ${prov}`,`${bare}, ${prov}`])]){try{cands.push(...await geocodeAll(q))}catch(e){}await sleep(S.cfg.gkey?150:1100)}
+    cands=cands.filter(c=>!tw||norm(c.name).includes(tw));
+    if(cands.length){if(o)cands.sort((a,b)=>hav(o,a)-hav(o,b));found={...cands[0],level:'pueblo'}}}
   if(!found||found.level==='pueblo'){const same=S.places.filter(x=>x.tkey===P.tkey);
     if(same.length)return {lat:same.reduce((t,x)=>t+x.ll.lat,0)/same.length,lon:same.reduce((t,x)=>t+x.ll.lon,0)/same.length,name:'Lugares guardados del pueblo',level:'pueblo'}}
   return found;
