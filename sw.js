@@ -1,6 +1,6 @@
 /* Service worker: la app funciona sin cobertura una vez abierta con conexión.
    Cambia VERSION en cada publicación para que los móviles reciban la nueva versión. */
-const VERSION = 'ruta-reparto-0.8.0-beta';
+const VERSION = 'ruta-reparto-0.8.1-beta';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png', './icons/apple-touch-icon.png'];
 const CDN = /^https:\/\/(cdn\.jsdelivr\.net|fonts\.googleapis\.com|fonts\.gstatic\.com)\//;
 const NEVER = /^https:\/\/(nominatim\.openstreetmap\.org|maps\.googleapis\.com|maps\.gstatic\.com)\//;

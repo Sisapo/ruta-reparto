@@ -245,7 +245,7 @@ ol.stops{list-style:none;margin:0;padding:0}
 {
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const APP_VERSION='0.8.0-beta';
+const APP_VERSION='0.8.1-beta';
 const KEY='rutaReparto.v1';
 const OFF0={id:'vdo',name:'Correos Villarrubia de los Ojos',addr:'Calle Tirante 43, 13670 Villarrubia de los Ojos, Ciudad Real',ll:''};
 const OFF1={id:'mal',name:'Correos Malagón',addr:'Calle Real 82, 13420 Malagón, Ciudad Real',ll:''};
@@ -676,8 +676,10 @@ async function locate(addr){
     if(r&&(!tw||!r.name||norm(r.name).includes(tw))){found={...r,level};break}}
   if(!found&&P.town){const o=parseLL(S.cfg.officeLL),bare=P.town.replace(/^(el|la|los|las)\s+/i,'');let cands=[];
     for(const q of [...new Set([`${P.town}, ${prov}`,`${bare}, ${prov}`])]){try{cands.push(...await geocodeAll(q))}catch(e){}await sleep(S.cfg.gkey?150:1100)}
-    cands=cands.filter(c=>!tw||norm(c.name).includes(tw));
-    if(cands.length){if(o)cands.sort((a,b)=>hav(o,a)-hav(o,b));found={...cands[0],level:'pueblo'}}}
+    const cp=(P.place.match(/\b\d{5}\b/)||[])[0],muni=norm(String(curOff().addr||'').split(',').map(t=>t.trim()).find(t=>/\b\d{5}\b/.test(t))||'').replace(/^\d+\s*/,'');
+    cands=cands.filter(c=>(!tw||norm(c.name).includes(tw))&&!(cp&&(c.name.match(/\b\d{5}\b/g)||[]).some(x=>x!==cp)));
+    const score=c=>(o?hav(o,c):0)-(muni&&norm(c.name).includes(muni)?15:0)-(cp&&c.name.includes(cp)?15:0);
+    if(cands.length){cands.sort((a,b)=>score(a)-score(b));found={...cands[0],level:'pueblo'}}}
   if(!found&&tp)return {...tp.ll,name:'Pueblo guardado',level:'pueblo'};
   if(!found||found.level==='pueblo'){const same=S.places.filter(x=>x.tkey===P.tkey&&x!==tp);
     if(same.length)return {lat:same.reduce((t,x)=>t+x.ll.lat,0)/same.length,lon:same.reduce((t,x)=>t+x.ll.lon,0)/same.length,name:'Lugares guardados del pueblo',level:'pueblo'}}
